@@ -1,0 +1,37 @@
+name: SMARTA CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Docker Compose
+      run: sudo apt-get install docker-compose -y
+
+    - name: Build and start containers
+      run: docker-compose up -d --build
+
+    - name: Check running containers
+      run: docker ps -a
+
+    - name: Test Backend API Health
+      run: |
+        sleep 10
+        curl -f http://localhost:8000/docs || exit 1
+
+    - name: Shut down containers
+      run: docker-compose down
