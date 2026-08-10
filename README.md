@@ -1,1 +1,1 @@
-# SMARTA-Hackathon
+# SMARTA-DEMO
