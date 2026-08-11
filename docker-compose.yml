@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: ./backend
+    container_name: smarta_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - smarta_data:/app/data
+    environment:
+      - SQLITE_DB_PATH=/app/data/smarta_v2.db
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: smarta_frontend
+    ports:
+      - "8501:8501"
+    volumes:
+      - smarta_data:/app/data
+    environment:
+      - DB_PATH=/app/data/smarta_v2.db
+    depends_on:
+      - backend
+    restart: always
+
+  iot_simulator:
+    build: ./iot_simulator
+    container_name: smarta_simulator
+    environment:
+      - BACKEND_URL=http://backend:8000/api/v1/telemetry
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  smarta_data:
