@@ -20,7 +20,7 @@ jobs:
         python-version: '3.11'
 
     - name: Install Docker Compose
-      run: sudo apt-get install docker-compose -y
+      run: sudo apt-get update && sudo apt-get install docker-compose -y
 
     - name: Build and start containers
       run: docker-compose up -d --build
@@ -30,8 +30,10 @@ jobs:
 
     - name: Test Backend API Health
       run: |
-        sleep 10
-        curl -f http://localhost:8000/docs || exit 1
+        echo "Waiting 30 seconds for backend and AI models to initialize..."
+        sleep 30
+        curl -f http://localhost:8000/docs || (docker-compose logs && exit 1)
 
     - name: Shut down containers
+      if: always()
       run: docker-compose down
