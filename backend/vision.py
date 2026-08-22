@@ -9,32 +9,16 @@ from ultralytics import YOLO
 model = YOLO("yolov8n.pt")
 
 # USDA ARS Handbook 66 - Storage Baselines (Optimal Temp in °C, Max Days at Optimal Conditions)
+# تم تقليل القائمة لتتناسب فقط مع الفواكه والخضروات التي يدعمها موديل COCO الافتراضي لضمان استقرار الـ Demo
 USDA_BASELINE: Dict[str, Tuple[float, int]] = {
     # Fruits
     "apple": (0.0, 90),
     "banana": (13.0, 7),
     "orange": (4.0, 30),
-    "strawberry": (0.0, 7),
-    "grape": (0.0, 14),
-    "mango": (12.0, 14),
-    "lemon": (10.0, 28),
-    "watermelon": (12.0, 14),
-    "peach": (0.0, 14),
-    "pear": (0.0, 30),
     
     # Vegetables
-    "tomato": (12.0, 10),
-    "potato": (7.0, 90),
-    "onion": (0.0, 60),
     "carrot": (0.0, 28),
-    "broccoli": (0.0, 14),
-    "cucumber": (10.0, 10),
-    "bell pepper": (7.0, 14),
-    "spinach": (0.0, 7),
-    "lettuce": (0.0, 10),
-    "cabbage": (0.0, 30),
-    "garlic": (0.0, 120),
-    "zucchini": (8.0, 10)
+    "broccoli": (0.0, 14)
 }
 
 def predict_shelf_life(item_name: str, current_temp: float, current_hum: float) -> Dict[str, Any]:
@@ -73,7 +57,10 @@ def analyze_image(image_bytes: bytes) -> Dict[str, Any]:
     Runs YOLOv8 object detection on produce image stream.
     """
     img = Image.open(io.BytesIO(image_bytes))
-    results = model(img)
+    
+    # تحديد الكلاسات المسموحة فقط لتجاهل الأشخاص والموبايلات وغيرها
+    # 46: banana, 47: apple, 49: orange, 50: broccoli, 51: carrot
+    results = model(img, classes=[46, 47, 49, 50, 51])
 
     detected_items = []
     for r in results:

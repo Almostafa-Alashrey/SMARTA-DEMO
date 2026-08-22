@@ -1,250 +1,52 @@
-# import os
-# import sqlite3
-# import logging
-# import numpy as np
-# from fastapi import FastAPI, HTTPException
-# from pydantic import BaseModel
-# from sklearn.ensemble import IsolationForest
-
-# logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-# app = FastAPI(title="SMARTA AI Backend")
-
-# DB_PATH = os.getenv("SQLITE_DB_PATH", "/app/data/smarta.db")
-
-# # البافر دلوقتي هيشيل 3 قراءات لكل سطر
-# telemetry_buffer = []
-# model = IsolationForest(contamination=0.1, random_state=42)
-
-# def init_db():
-#     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-#     conn = sqlite3.connect(DB_PATH, timeout=10)
-#     cursor = conn.cursor()
-#     cursor.execute('''
-#         CREATE TABLE IF NOT EXISTS telemetry (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             sensor_id TEXT,
-#             location TEXT,
-#             timestamp TEXT,
-#             temperature REAL,
-#             humidity REAL,
-#             gas_level REAL,
-#             is_anomaly INTEGER
-#         )
-#     ''')
-#     conn.commit()
-#     conn.close()
-
-# init_db()
-
-# class TelemetryPayload(BaseModel):
-#     sensor_id: str
-#     location: str
-#     timestamp: str
-#     temperature: float
-#     humidity: float
-#     gas_level: float
-
-# @app.post("/api/v1/telemetry")
-# def receive_telemetry(payload: TelemetryPayload):
-#     global telemetry_buffer
-#     is_anomaly = 0
-    
-#     # تجهيز الداتا للـ ML
-#     features = [payload.temperature, payload.humidity, payload.gas_level]
-#     telemetry_buffer.append(features)
-    
-#     if len(telemetry_buffer) > 10:
-#         if len(telemetry_buffer) > 50:
-#             telemetry_buffer.pop(0)
-        
-#         # تدريب الموديل على الـ 3 عوامل
-#         model.fit(telemetry_buffer)
-#         prediction = model.predict([features])
-        
-#         if prediction[0] == -1:
-#             is_anomaly = 1
-#             logging.warning(f"🚨 AI ANOMALY DETECTED AT {payload.location}! Gas: {payload.gas_level}ppm")
-
-#     try:
-#         conn = sqlite3.connect(DB_PATH, timeout=10)
-#         cursor = conn.cursor()
-#         cursor.execute(
-#             "INSERT INTO telemetry (sensor_id, location, timestamp, temperature, humidity, gas_level, is_anomaly) VALUES (?, ?, ?, ?, ?, ?, ?)",
-#             (payload.sensor_id, payload.location, payload.timestamp, payload.temperature, payload.humidity, payload.gas_level, is_anomaly)
-#         )
-#         conn.commit()
-#         conn.close()
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail="Database write failed")
-
-#     return {"status": "success", "anomaly_detected": bool(is_anomaly)}
-
-
-
-# import os
-# import sqlite3
-# import numpy as np
-# import pandas as pd
-# from fastapi import FastAPI
-# from sklearn.ensemble import IsolationForest
-
-# app = FastAPI()
-
-# # Global memory buffer for the model
-# telemetry_buffer = []
-# model = IsolationForest(contamination=0.05, random_state=42)
-
-# @app.post("/api/v1/telemetry")
-# async def receive_telemetry(data: dict):
-#     global telemetry_buffer, model
-    
-#     temp = data['temperature']
-#     hum = data['humidity']
-#     gas = data['gas_level']
-    
-#     # Append to buffer
-#     telemetry_buffer.append([temp, hum, gas])
-#     if len(telemetry_buffer) > 100:
-#         telemetry_buffer.pop(0)
-        
-#     # Fit model if we have enough data
-#     is_anomaly = 0
-#     if len(telemetry_buffer) >= 10:
-#         X = np.array(telemetry_buffer)
-#         model.fit(X)
-#         pred = model.predict([[temp, hum, gas]])[0] # -1 means anomaly, 1 means normal
-        
-#         # Hybrid check: ML flags it AND values are genuinely outside safe bounds
-#         if pred == -1 and (temp > 30.0 or hum > 75.0 or gas > 2.0):
-#             is_anomaly = 1
-
-#     conn = sqlite3.connect("/app/data/smarta_v2.db")
-#     cursor = conn.cursor()
-#     cursor.execute("""
-#         INSERT INTO telemetry (sensor_id, location, timestamp, temperature, humidity, gas_level, is_anomaly)
-#         VALUES (?, ?, ?, ?, ?, ?, ?)
-#     """, (data['sensor_id'], data['location'], data['timestamp'], temp, hum, gas, is_anomaly))
-#     conn.commit()
-#     conn.close()
-    
-#     return {"status": "ok", "is_anomaly": is_anomaly}
-
-
-
-
-
-
-# import os
-# import sqlite3
-# import numpy as np
-# import pandas as pd
-# from fastapi import FastAPI
-# from sklearn.ensemble import IsolationForest
-# from Backend.database import init_db, add_inventory_item, get_all_inventory, delete_inventory_item
-# app = FastAPI()
-
-# telemetry_buffer = []
-# model = IsolationForest(contamination=0.05, random_state=42)
-
-# # --- Database Initialization ---
-# def init_db():
-#     os.makedirs("/app/data", exist_ok=True)
-#     conn = sqlite3.connect("/app/data/smarta_v2.db")
-#     cursor = conn.cursor()
-#     cursor.execute("""
-#         CREATE TABLE IF NOT EXISTS telemetry (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             sensor_id TEXT,
-#             location TEXT,
-#             timestamp TEXT,
-#             temperature REAL,
-#             humidity REAL,
-#             gas_level REAL,
-#             is_anomaly INTEGER
-#         )
-#     """)
-#     conn.commit()
-#     conn.close()
-
-# init_db()  # Run once when server starts
-# # -------------------------------
-
-# @app.post("/api/v1/telemetry")
-# async def receive_telemetry(data: dict):
-#     global telemetry_buffer, model
-    
-#     # Cast values to float just to be 100% safe
-#     temp = float(data['temperature'])
-#     hum = float(data['humidity'])
-#     gas = float(data['gas_level'])
-    
-#     is_anomaly = 0
-    
-#     if len(telemetry_buffer) >= 10:
-#         X = np.array(telemetry_buffer)
-#         model.fit(X)
-#         pred = model.predict([[temp, hum, gas]])[0]
-        
-#         if pred == -1 and (temp > 30.0 or hum > 75.0 or gas > 2.0):
-#             is_anomaly = 1
-            
-#     # Fail-safe override for catastrophic total failure
-#     if temp > 40.0 and hum > 80.0 and gas > 5.0:
-#         is_anomaly = 1
-
-#     # Smart Buffer: Only append normal data to avoid Model Pollution
-#     if is_anomaly == 0:
-#         telemetry_buffer.append([temp, hum, gas])
-#         if len(telemetry_buffer) > 100:
-#             telemetry_buffer.pop(0)
-
-#     conn = sqlite3.connect("/app/data/smarta_v2.db")
-#     cursor = conn.cursor()
-#     cursor.execute("""
-#         INSERT INTO telemetry (sensor_id, location, timestamp, temperature, humidity, gas_level, is_anomaly)
-#         VALUES (?, ?, ?, ?, ?, ?, ?)
-#     """, (data['sensor_id'], data['location'], data['timestamp'], temp, hum, gas, is_anomaly))
-#     conn.commit()
-#     conn.close()
-    
-#     return {"status": "ok", "is_anomaly": is_anomaly}
-
-
 import os
-import sqlite3
+import math
 import warnings
 import numpy as np
-import pandas as pd
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from datetime import datetime, timedelta
 from fastapi import FastAPI, File, UploadFile, Form
 from sklearn.ensemble import IsolationForest
+from vision import analyze_image
 
-# Mute Scikit-Learn joblib thread/parallel warnings in terminal output
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
-# Import database and vision helper modules (FIXED CASE SENSITIVITY)
-# Import database and vision helper modules
-from database import init_db, add_inventory_item, get_all_inventory, delete_inventory_item
-from vision import analyze_image, predict_shelf_life
+app = FastAPI(title="SMARTA Real-Time API")
 
-app = FastAPI(title="SMARTA Warehouse API")
+# ==========================================
+# 1. THE CACHE SYSTEM (Dictionary)
+# ==========================================
+SMARTA_CACHE = {
+    "baselines": None,       # هيتخزن فيها بيانات الخضار وعمره الافتراضي
+    "inventory": None,       # هيتخزن فيها الجرد عشان الداشبورد تقراه بسرعة
+    "telemetry_buffer": []   # عشان الـ AI Model يقرأ منها بسرعة
+}
 
-telemetry_buffer = []
-# Set n_jobs=1 to suppress joblib parallel worker noise on Windows/Python 3.13
 model = IsolationForest(contamination=0.05, random_state=42, n_jobs=1)
 
+# ==========================================
+# 2. POSTGRESQL CONNECTION
+# ==========================================
+def get_db_connection():
+    return psycopg2.connect(
+        host=os.getenv("DB_HOST", "localhost"), # لو بـ Docker خليها "db" في الـ docker-compose
+        database=os.getenv("DB_NAME", "smarta_db"),
+        user=os.getenv("DB_USER", "smarta_admin"),
+        password=os.getenv("DB_PASS", "smarta_password")
+    )
 
-def ensure_telemetry_schema(conn: sqlite3.Connection):
-    """
-    Ensures the telemetry table exists with all required columns,
-    automatically adding any missing columns to prevent database crashes.
-    """
+def init_postgres_db():
+    """بناء الجداول الأساسية في بوستجرس ووضع البيانات الافتراضية للخضار"""
+    conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # جدول السنسورات
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS telemetry (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sensor_id TEXT,
-            location TEXT,
-            timestamp TEXT,
+            id SERIAL PRIMARY KEY,
+            sensor_id VARCHAR(50),
+            location VARCHAR(50),
+            timestamp TIMESTAMP,
             temperature REAL,
             humidity REAL,
             gas_level REAL,
@@ -252,149 +54,177 @@ def ensure_telemetry_schema(conn: sqlite3.Connection):
         )
     """)
     
-    # Check existing schema to dynamically alter/add missing columns if old DB exists
-    cursor.execute("PRAGMA table_info(telemetry)")
-    existing_columns = [col[1] for col in cursor.fetchall()]
+    # جدول المخزون (Inventory)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS inventory (
+            id SERIAL PRIMARY KEY,
+            item_name VARCHAR(100),
+            shelf_id VARCHAR(50),
+            confidence REAL,
+            days_remaining INTEGER,
+            exp_date DATE,
+            risk_level VARCHAR(20)
+        )
+    """)
+
+    # جدول خصائص الخضار (بديل القاموس الثابت)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS produce_baselines (
+            item_name VARCHAR(50) PRIMARY KEY,
+            optimal_temp_c REAL,
+            max_days INTEGER
+        )
+    """)
     
-    required_columns = {
-        "sensor_id": "TEXT",
-        "location": "TEXT",
-        "timestamp": "TEXT",
-        "temperature": "REAL",
-        "humidity": "REAL",
-        "gas_level": "REAL",
-        "is_anomaly": "INTEGER"
-    }
+    # إدخال بيانات الخضار الأساسية لو الجدول فاضي
+    cursor.execute("SELECT COUNT(*) FROM produce_baselines")
+    if cursor.fetchone()[0] == 0:
+        default_produce = [
+            ('apple', 0.0, 90), ('banana', 13.0, 7), 
+            ('orange', 4.0, 30), ('carrot', 0.0, 28), ('broccoli', 0.0, 14)
+        ]
+        cursor.executemany(
+            "INSERT INTO produce_baselines (item_name, optimal_temp_c, max_days) VALUES (%s, %s, %s)",
+            default_produce
+        )
 
-    for col_name, col_type in required_columns.items():
-        if col_name not in existing_columns:
-            cursor.execute(f"ALTER TABLE telemetry ADD COLUMN {col_name} {col_type}")
-            
     conn.commit()
-
-
-# --- Startup Event ---
-@app.on_event("startup")
-def startup_event():
-    init_db()
-    conn = sqlite3.connect("smarta.db", timeout=10.0)
-    ensure_telemetry_schema(conn)
+    cursor.close()
     conn.close()
 
+def load_baselines_to_cache():
+    """تحميل بيانات الخضار من الداتا بيز للكاش مرة واحدة بس"""
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM produce_baselines")
+    rows = cursor.fetchall()
+    
+    # تحويل الداتا لشكل Dictionary وحفظها في الكاش
+    SMARTA_CACHE["baselines"] = {row['item_name']: (row['optimal_temp_c'], row['max_days']) for row in rows}
+    
+    cursor.close()
+    conn.close()
 
-# --- Telemetry & Anomaly Processing ---
+@app.on_event("startup")
+def startup_event():
+    init_postgres_db()
+    load_baselines_to_cache() # شحن الكاش أول ما السيرفر يقوم
+
+# ==========================================
+# 3. CORE ENDPOINTS (IoT & AI)
+# ==========================================
 @app.post("/api/v1/telemetry")
 def receive_telemetry(data: dict):
-    """
-    Receives IoT sensor telemetry data, runs Isolation Forest anomaly detection,
-    and safely persists records into SQLite.
-    """
-    global telemetry_buffer, model
-
     try:
-        temp = float(data.get('temperature', 0.0))
-        hum = float(data.get('humidity', 0.0))
-        gas = float(data.get('gas_level', 0.0))
-        sensor_id = str(data.get('sensor_id', 'SENS-01'))
-        location = str(data.get('location', 'Shelf A1'))
-        timestamp = str(data.get('timestamp', ''))
+        temp, hum, gas = float(data.get('temperature', 0.0)), float(data.get('humidity', 0.0)), float(data.get('gas_level', 0.0))
+        sensor_id, location, timestamp = str(data.get('sensor_id', 'SENS-01')), str(data.get('location', 'Shelf A1')), str(data.get('timestamp', datetime.now().isoformat()))
 
         is_anomaly = 0
+        buffer = SMARTA_CACHE["telemetry_buffer"]
 
-        # 1. Isolation Forest Machine Learning check
-        if len(telemetry_buffer) >= 10:
-            X = np.array(telemetry_buffer)
-            model.fit(X)
-            preds = model.predict([[temp, hum, gas]])
-            
-            # Robust extraction preventing tuple index out of range errors
-            pred = preds.item() if hasattr(preds, 'item') else preds[0]
+        if len(buffer) >= 10:
+            model.fit(np.array(buffer))
+            pred = model.predict([[temp, hum, gas]])[0]
             if pred == -1 and (temp > 30.0 or hum > 75.0 or gas > 2.0):
                 is_anomaly = 1
 
-        # 2. Hard threshold override for extreme spoilage
-        if temp > 40.0 and hum > 80.0 and gas > 2.5:
-            is_anomaly = 1
-
-        # 3. Telemetry buffer management (clean baseline data only)
         if is_anomaly == 0:
-            telemetry_buffer.append([temp, hum, gas])
-            if len(telemetry_buffer) > 100:
-                telemetry_buffer.pop(0)
+            buffer.append([temp, hum, gas])
+            if len(buffer) > 100: buffer.pop(0)
 
-        # 4. Save safely to SQLite
-        conn = sqlite3.connect("smarta.db", timeout=10.0)
-        ensure_telemetry_schema(conn)
+        # Write to Postgres
+        conn = get_db_connection()
         cursor = conn.cursor()
-        
         cursor.execute("""
             INSERT INTO telemetry (sensor_id, location, timestamp, temperature, humidity, gas_level, is_anomaly)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (sensor_id, location, timestamp, temp, hum, gas, is_anomaly))
-        
         conn.commit()
+        cursor.close()
         conn.close()
 
         return {"status": "ok", "is_anomaly": is_anomaly}
-
     except Exception as e:
-        print(f"❌ Error handling telemetry: {e}")
         return {"status": "error", "message": str(e)}
 
-
-# --- Veggie AI Scanner Endpoint ---
 @app.post("/api/v1/scan-veggie")
-async def scan_veggie(
-    file: UploadFile = File(...),
-    shelf_id: str = Form("Shelf A1")
-):
-    """
-    Processes produce image with YOLOv8, models remaining shelf-life using Q10 decay,
-    and automatically logs the item in inventory.
-    """
+async def scan_veggie(file: UploadFile = File(...), shelf_id: str = Form("Shelf A1")):
     image_bytes = await file.read()
     detection = analyze_image(image_bytes)
 
     if not detection.get("detected"):
-        return {
-            "success": False,
-            "message": "No recognizable produce detected. Please try a clearer image."
-        }
+        return {"success": False, "message": "No recognizable produce detected."}
 
-    # Standard ambient warehouse microclimate baselines
-    current_temp = 20.0
-    current_hum = 60.0
+    item_key = detection["primary_item"].lower()
+    
+    # القراءة من الـ Cache مباشرة بدل الداتا بيز (Real-time speed)
+    baselines = SMARTA_CACHE["baselines"]
+    if item_key not in baselines:
+        opt_temp, base_days = (4.0, 10)
+    else:
+        opt_temp, base_days = baselines[item_key]
 
-    exp_info = predict_shelf_life(detection["primary_item"], current_temp, current_hum)
+    current_temp, current_hum = 20.0, 60.0 # Standard for now
+    
+    # الحسابات
+    temp_diff = max(0.0, current_temp - opt_temp)
+    degradation_factor = math.pow(2.0, temp_diff / 10.0)
+    hum_factor = 1.25 if current_hum < 85.0 else 1.0
+    adjusted_days = max(1, round(base_days / (degradation_factor * hum_factor)))
+    exp_date = (datetime.now() + timedelta(days=adjusted_days)).strftime("%Y-%m-%d")
+    risk_level = "High" if adjusted_days <= 3 else "Moderate" if adjusted_days <= 7 else "Low"
 
-    db_id = add_inventory_item(
-        item_name=exp_info["item"],
-        shelf_id=shelf_id,
-        confidence=detection["confidence"],
-        days_remaining=exp_info["estimated_days_remaining"],
-        exp_date=exp_info["estimated_expiration_date"],
-        risk=exp_info["degradation_risk"]
-    )
+    # الحفظ في Postgres
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO inventory (item_name, shelf_id, confidence, days_remaining, exp_date, risk_level)
+        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+    """, (detection["primary_item"], shelf_id, detection["confidence"], adjusted_days, exp_date, risk_level))
+    db_id = cursor.fetchone()[0]
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    # Invalidate Inventory Cache (عشان يقرأ الجديد المرة الجاية)
+    SMARTA_CACHE["inventory"] = None
 
     return {
-        "success": True,
-        "inventory_id": db_id,
-        "shelf_assigned": shelf_id,
-        "detection": detection,
-        "freshness_assessment": exp_info
+        "success": True, "inventory_id": db_id,
+        "freshness_assessment": {
+            "item": detection["primary_item"].capitalize(), "estimated_days_remaining": adjusted_days,
+            "estimated_expiration_date": exp_date, "degradation_risk": risk_level, "optimal_temp_c": opt_temp
+        }
     }
 
-
-# --- Warehouse Inventory CRUD Endpoints ---
 @app.get("/api/v1/inventory")
 def fetch_inventory():
-    """Returns all active warehouse produce inventory records."""
-    items = get_all_inventory()
-    return {"success": True, "inventory": items}
+    """استرجاع المخزون من الـ Cache فوراً لو متاح، لو مش متاح يجيبه من Postgres"""
+    if SMARTA_CACHE["inventory"] is not None:
+        return {"success": True, "inventory": SMARTA_CACHE["inventory"], "source": "cache"}
 
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM inventory ORDER BY id DESC")
+    items = cursor.fetchall()
+    cursor.close()
+    conn.close()
 
-@app.delete("/api/v1/inventory/{item_id}")
-def remove_inventory_item(item_id: int):
-    """Deletes an item record from warehouse inventory."""
-    delete_inventory_item(item_id)
-    return {"success": True, "message": f"Item {item_id} successfully removed."}
+    # حفظ في الكاش
+    SMARTA_CACHE["inventory"] = items
+    return {"success": True, "inventory": items, "source": "database"}
+
+@app.get("/api/v1/telemetry")
+def fetch_telemetry():
+    """استرجاع آخر 300 قراءة من السنسورات لعرضها في الداشبورد"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        # بنجيب آخر 300 عشان الجرافات تترسم بشكل حي وخفيف
+        cursor.execute("SELECT * FROM telemetry ORDER BY id DESC LIMIT 300")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return {"success": True, "telemetry": rows}
+    except Exception as e:
+        return {"success": False, "message": str(e)}

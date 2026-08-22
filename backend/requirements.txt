@@ -3,3 +3,4 @@ uvicorn>=0.23.2
 pydantic>=2.4.2
 scikit-learn>=1.4.0
 pandas
+psycopg2-binary==2.9.9
