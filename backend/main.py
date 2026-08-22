@@ -221,9 +221,9 @@ from sklearn.ensemble import IsolationForest
 # Mute Scikit-Learn joblib thread/parallel warnings in terminal output
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
-# Import database and vision helper modules
-from Backend.database import init_db, add_inventory_item, get_all_inventory, delete_inventory_item
-from Backend.vision import analyze_image, predict_shelf_life
+# Import database and vision helper modules (FIXED CASE SENSITIVITY)
+from backend.database import init_db, add_inventory_item, get_all_inventory, delete_inventory_item
+from backend.vision import analyze_image, predict_shelf_life
 
 app = FastAPI(title="SMARTA Warehouse API")
 
