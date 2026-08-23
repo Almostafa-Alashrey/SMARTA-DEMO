@@ -125,16 +125,16 @@ def generate_telemetry(tick: int) -> dict:
     loc = random.choice(LOCATIONS)
     sensor_id = f"SENS-{loc.replace(' ', '')}"
     
-    # Normal operational parameters
-    temperature = round(random.uniform(18.0, 24.0), 2)
-    humidity = round(random.uniform(45.0, 60.0), 2)
-    gas_level = round(random.uniform(0.1, 0.5), 2)
+    # Realistic operational parameters for DHT (temp/humidity) and MQ-135 (gas PPM)
+    temperature = round(random.uniform(22.0, 28.0), 2)
+    humidity = round(random.uniform(50.0, 70.0), 2)
+    gas_level = round(random.uniform(150.0, 400.0), 2)  # Realistic clean-air PPM scale
 
-    # Anomaly injection every 10 ticks
+    # Anomaly injection every 10 ticks (spoilage simulation)
     if tick % 10 == 0:
-        temperature = round(random.uniform(35.0, 45.0), 2)
-        humidity = round(random.uniform(76.0, 85.0), 2)
-        gas_level = round(random.uniform(2.5, 5.0), 2)
+        temperature = round(random.uniform(34.0, 42.0), 2)
+        humidity = round(random.uniform(78.0, 88.0), 2)
+        gas_level = round(random.uniform(2200.0, 3500.0), 2)  # High risk gas/ethylene spike
         logging.warning(f"⚠️ [ANOMALY INJECTED] Spoilage simulated at {loc} (Gas: {gas_level}ppm, Temp: {temperature}°C)!")
 
     return {

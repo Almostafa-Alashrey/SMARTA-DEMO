@@ -17,23 +17,20 @@ app = FastAPI(title="SMARTA Real-Time API")
 # 1. THE CACHE SYSTEM (Dictionary)
 # ==========================================
 SMARTA_CACHE = {
-    "baselines": None,       # هيتخزن فيها بيانات الخضار وعمره الافتراضي
-    "inventory": None,       # هيتخزن فيها الجرد عشان الداشبورد تقراه بسرعة
-    "telemetry_buffer": []   # عشان الـ AI Model يقرأ منها بسرعة
+    "baselines": None,
+    "inventory": None,
+    "telemetry_buffer": []
 }
 
 model = IsolationForest(contamination=0.05, random_state=42, n_jobs=1)
 
 # ==========================================
-# 2. POSTGRESQL CONNECTION
+# 2. POSTGRESQL CONNECTION (SUPABASE)
 # ==========================================
 def get_db_connection():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"), # لو بـ Docker خليها "db" في الـ docker-compose
-        database=os.getenv("DB_NAME", "smarta_db"),
-        user=os.getenv("DB_USER", "smarta_admin"),
-        password=os.getenv("DB_PASS", "smarta_password")
-    )
+    # Using the IPv4 Session Pooler URI to bypass the local network block
+    pooler_url = "postgresql://postgres.fhfxqryxspsaohzojjmz:dDwK7YuKfIJ893JS@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
+    return psycopg2.connect(pooler_url)
 
 def init_postgres_db():
     """بناء الجداول الأساسية في بوستجرس ووضع البيانات الافتراضية للخضار"""
