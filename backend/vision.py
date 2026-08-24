@@ -1,58 +1,32 @@
-import io
-from typing import Dict, Any
-from PIL import Image
+import os
 from ultralytics import YOLO
+from PIL import Image
+import io
 
-# ==========================================
-# 1. LOAD ALL CUSTOM MODELS
-# ==========================================
-# We load them into a dictionary once at startup so the server doesn't 
-# waste time reloading the files every time a new image is scanned.
-CUSTOM_MODELS = {
-    "garlic": YOLO("models/best_garlics.pt"),
-    "potato": YOLO("models/best_potatoes.pt"),
-    "tomato": YOLO("models/best_tomatoes.pt"),
-    "general": YOLO("models/best.pt")
-}
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pt")
 
-def analyze_image(image_bytes: bytes) -> Dict[str, Any]:
-    """
-    Runs YOLOv8 object detection on the uploaded image using all custom models.
-    Returns the detection with the highest confidence score.
-    """
-    img = Image.open(io.BytesIO(image_bytes))
-    
-    all_detections = []
+# Load model
+model = YOLO(MODEL_PATH)
 
-    # ==========================================
-    # 2. SCAN IMAGE WITH EVERY MODEL
-    # ==========================================
-    for model_name, model in CUSTOM_MODELS.items():
-        # conf=0.25 ignores extremely weak guesses
-        results = model.predict(img, conf=0.25, verbose=False)
+def analyze_image(image_bytes: bytes) -> dict:
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        results = model.predict(image, verbose=False)
+        result = results[0]
         
-        for r in results:
-            for box in r.boxes:
-                cls_id = int(box.cls[0])
-                label = model.names[cls_id].lower()
-                confidence = float(box.conf[0])
-                
-                all_detections.append({
-                    "label": label,
-                    "confidence": round(confidence, 2)
-                })
-
-    # ==========================================
-    # 3. RETURN THE BEST MATCH TO MAIN.PY
-    # ==========================================
-    if not all_detections:
-        return {"detected": False, "primary_item": None, "confidence": 0.0}
-
-    # Find the single detection with the absolute highest confidence score
-    best_match = max(all_detections, key=lambda x: x["confidence"])
-
-    return {
-        "detected": True,
-        "primary_item": best_match["label"],
-        "confidence": best_match["confidence"]
-    }
+        # Check for classification probabilities
+        if hasattr(result, 'probs') and result.probs is not None:
+            top_class_index = int(result.probs.top1)
+            confidence = float(result.probs.top1conf)
+            item_name = result.names.get(top_class_index, "unknown")
+            
+            return {
+                "detected": True,
+                "primary_item": item_name,
+                "confidence": round(confidence, 2)
+            }
+        return {"detected": False}
+    except Exception as e:
+        print(f"Vision Error: {e}")
+        return {"detected": False}
