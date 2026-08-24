@@ -1,6 +1,8 @@
 import os
 import math
 import warnings
+import base64
+import cv2
 import numpy as np
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -13,9 +15,6 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
 app = FastAPI(title="SMARTA Real-Time API")
 
-# ==========================================
-# 1. THE CACHE SYSTEM (Dictionary)
-# ==========================================
 SMARTA_CACHE = {
     "baselines": None,
     "inventory": None,
@@ -24,20 +23,14 @@ SMARTA_CACHE = {
 
 model = IsolationForest(contamination=0.05, random_state=42, n_jobs=1)
 
-# ==========================================
-# 2. POSTGRESQL CONNECTION (SUPABASE)
-# ==========================================
 def get_db_connection():
-    # Using the IPv4 Session Pooler URI to bypass the local network block
     pooler_url = "postgresql://postgres.fhfxqryxspsaohzojjmz:dDwK7YuKfIJ893JS@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
     return psycopg2.connect(pooler_url)
 
 def init_postgres_db():
-    """بناء الجداول الأساسية في بوستجرس ووضع البيانات الافتراضية للخضار"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # جدول السنسورات
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS telemetry (
             id SERIAL PRIMARY KEY,
@@ -51,7 +44,6 @@ def init_postgres_db():
         )
     """)
     
-    # جدول المخزون (Inventory)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventory (
             id SERIAL PRIMARY KEY,
@@ -64,7 +56,6 @@ def init_postgres_db():
         )
     """)
 
-    # جدول خصائص الخضار (بديل القاموس الثابت)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS produce_baselines (
             item_name VARCHAR(50) PRIMARY KEY,
@@ -73,7 +64,6 @@ def init_postgres_db():
         )
     """)
     
-    # إدخال بيانات الخضار الأساسية لو الجدول فاضي
     cursor.execute("SELECT COUNT(*) FROM produce_baselines")
     if cursor.fetchone()[0] == 0:
         default_produce = [
@@ -90,26 +80,19 @@ def init_postgres_db():
     conn.close()
 
 def load_baselines_to_cache():
-    """تحميل بيانات الخضار من الداتا بيز للكاش مرة واحدة بس"""
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("SELECT * FROM produce_baselines")
     rows = cursor.fetchall()
-    
-    # تحويل الداتا لشكل Dictionary وحفظها في الكاش
     SMARTA_CACHE["baselines"] = {row['item_name']: (row['optimal_temp_c'], row['max_days']) for row in rows}
-    
     cursor.close()
     conn.close()
 
 @app.on_event("startup")
 def startup_event():
     init_postgres_db()
-    load_baselines_to_cache() # شحن الكاش أول ما السيرفر يقوم
+    load_baselines_to_cache()
 
-# ==========================================
-# 3. CORE ENDPOINTS (IoT & AI)
-# ==========================================
 @app.post("/api/v1/telemetry")
 def receive_telemetry(data: dict):
     try:
@@ -129,7 +112,6 @@ def receive_telemetry(data: dict):
             buffer.append([temp, hum, gas])
             if len(buffer) > 100: buffer.pop(0)
 
-        # Write to Postgres
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
@@ -154,16 +136,14 @@ async def scan_veggie(file: UploadFile = File(...), shelf_id: str = Form("Shelf 
 
     item_key = detection["primary_item"].lower()
     
-    # القراءة من الـ Cache مباشرة بدل الداتا بيز (Real-time speed)
     baselines = SMARTA_CACHE["baselines"]
     if item_key not in baselines:
         opt_temp, base_days = (4.0, 10)
     else:
         opt_temp, base_days = baselines[item_key]
 
-    current_temp, current_hum = 20.0, 60.0 # Standard for now
+    current_temp, current_hum = 20.0, 60.0 
     
-    # الحسابات
     temp_diff = max(0.0, current_temp - opt_temp)
     degradation_factor = math.pow(2.0, temp_diff / 10.0)
     hum_factor = 1.25 if current_hum < 85.0 else 1.0
@@ -171,7 +151,6 @@ async def scan_veggie(file: UploadFile = File(...), shelf_id: str = Form("Shelf 
     exp_date = (datetime.now() + timedelta(days=adjusted_days)).strftime("%Y-%m-%d")
     risk_level = "High" if adjusted_days <= 3 else "Moderate" if adjusted_days <= 7 else "Low"
 
-    # الحفظ في Postgres
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -183,20 +162,34 @@ async def scan_veggie(file: UploadFile = File(...), shelf_id: str = Form("Shelf 
     cursor.close()
     conn.close()
 
-    # Invalidate Inventory Cache (عشان يقرأ الجديد المرة الجاية)
     SMARTA_CACHE["inventory"] = None
 
+    # تجهيز الصورة بالـ Bounding Box وإرسالها كـ Base64
+    annotated_base64 = None
+    try:
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if "annotated_frame" in detection:
+            _, encoded_img = cv2.imencode('.jpg', detection["annotated_frame"])
+            annotated_base64 = base64.b64encode(encoded_img).decode('utf-8')
+    except Exception:
+        pass
+
     return {
-        "success": True, "inventory_id": db_id,
+        "success": True, 
+        "inventory_id": db_id,
+        "annotated_image_base64": annotated_base64,
         "freshness_assessment": {
-            "item": detection["primary_item"].capitalize(), "estimated_days_remaining": adjusted_days,
-            "estimated_expiration_date": exp_date, "degradation_risk": risk_level, "optimal_temp_c": opt_temp
+            "item": detection["primary_item"].capitalize(), 
+            "estimated_days_remaining": adjusted_days,
+            "estimated_expiration_date": exp_date, 
+            "degradation_risk": risk_level, 
+            "optimal_temp_c": opt_temp
         }
     }
 
 @app.get("/api/v1/inventory")
 def fetch_inventory():
-    """استرجاع المخزون من الـ Cache فوراً لو متاح، لو مش متاح يجيبه من Postgres"""
     if SMARTA_CACHE["inventory"] is not None:
         return {"success": True, "inventory": SMARTA_CACHE["inventory"], "source": "cache"}
 
@@ -207,17 +200,14 @@ def fetch_inventory():
     cursor.close()
     conn.close()
 
-    # حفظ في الكاش
     SMARTA_CACHE["inventory"] = items
     return {"success": True, "inventory": items, "source": "database"}
 
 @app.get("/api/v1/telemetry")
 def fetch_telemetry():
-    """استرجاع آخر 300 قراءة من السنسورات لعرضها في الداشبورد"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        # بنجيب آخر 300 عشان الجرافات تترسم بشكل حي وخفيف
         cursor.execute("SELECT * FROM telemetry ORDER BY id DESC LIMIT 300")
         rows = cursor.fetchall()
         cursor.close()

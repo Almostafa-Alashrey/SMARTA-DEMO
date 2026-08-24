@@ -1,4 +1,5 @@
 import os
+import base64
 import requests
 import pandas as pd
 import streamlit as st
@@ -17,8 +18,8 @@ if "notified_items" not in st.session_state:
 if "initial_load_done" not in st.session_state:
     st.session_state.initial_load_done = False
 
-# --- Cached Data Fetchers (Lightweight & Fast) ---
-@st.cache_data(ttl=10) # Caches inventory for 10s to prevent API spam
+# --- Cached Data Fetchers (Lightweight & Fast without Annoying Spinners) ---
+@st.cache_data(ttl=10, show_spinner=False) 
 def fetch_inventory_cached():
     try:
         res = requests.get(f"{BACKEND_URL}/api/v1/inventory", timeout=2).json()
@@ -28,7 +29,7 @@ def fetch_inventory_cached():
         pass
     return []
 
-@st.cache_data(ttl=5) # Caches telemetry for 5s
+@st.cache_data(ttl=5, show_spinner=False) 
 def fetch_telemetry_cached():
     try:
         res = requests.get(f"{BACKEND_URL}/api/v1/telemetry", timeout=2).json()
@@ -75,8 +76,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🌱 SMARTA: Storage Monitoring & Real-time Tracking Assurance")
-st.caption("AI-driven produce freshness prediction, microclimate anomaly detection, and automated shelf management.")
+st.title("🌱 SMARTA")
 
 # ==========================================
 # SIDEBAR: CONTROLLED NOTIFICATION CENTER
@@ -86,7 +86,6 @@ st.sidebar.markdown("---")
 
 sidebar_alerts = []
 
-# Process Inventory Expiry Alerts without Flooding
 inventory_data = fetch_inventory_cached()
 for item in inventory_data:
     days_left = item.get("days_remaining", 99)
@@ -105,7 +104,6 @@ for item in inventory_data:
         elif not st.session_state.initial_load_done:
             st.session_state.notified_items.add(toast_key)
 
-# Process Telemetry Microclimate Alerts
 telemetry_df = fetch_telemetry_cached()
 if not telemetry_df.empty:
     latest = telemetry_df.iloc[0]
@@ -125,7 +123,6 @@ if not telemetry_df.empty:
 
 st.session_state.initial_load_done = True
 
-# Render Sidebar Notification Feed
 if sidebar_alerts:
     st.sidebar.error(f"Active Alerts: {len(sidebar_alerts)}")
     for alert in sidebar_alerts:
@@ -138,7 +135,6 @@ if st.sidebar.button("🧹 Clear Notification Cache"):
     st.cache_data.clear()
     st.rerun()
 
-# --- Spline Chart Helper ---
 def plot_spline_chart(df, y_col, color_hex, title):
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -158,7 +154,6 @@ def plot_spline_chart(df, y_col, color_hex, title):
     )
     return fig
 
-# --- Main Navigation Tabs ---
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Live Dashboard", "🥕 Veggie AI Scanner", "📦 Inventory", "🛠️ System Logs"])
 
 # ==========================================
@@ -201,13 +196,13 @@ with tab1:
             ch1, ch2, ch3 = st.columns(3)
             with ch1:
                 st.subheader("Temperature Trend")
-                st.plotly_chart(plot_spline_chart(display_df, 'temperature', '#f87171', 'Temp'), use_container_width=True)
+                st.plotly_chart(plot_spline_chart(display_df, 'temperature', '#f87171', 'Temp'), width='stretch')
             with ch2:
                 st.subheader("Humidity Trend")
-                st.plotly_chart(plot_spline_chart(display_df, 'humidity', '#60a5fa', 'Humidity'), use_container_width=True)
+                st.plotly_chart(plot_spline_chart(display_df, 'humidity', '#60a5fa', 'Humidity'), width='stretch')
             with ch3:
                 st.subheader("Gas Level Trend")
-                st.plotly_chart(plot_spline_chart(display_df, 'gas_level', '#34d399', 'Gas'), use_container_width=True)
+                st.plotly_chart(plot_spline_chart(display_df, 'gas_level', '#34d399', 'Gas'), width='stretch')
     else:
         st.info("Waiting for data from IoT Simulator...")
 
@@ -235,6 +230,14 @@ with tab2:
                 
                 if res.get("success"):
                     st.success("✅ Item successfully identified and assigned!")
+                    
+                    # --- عرض الصورة بحجم أصغر ومناسب (width=450) ---
+                    if res.get("annotated_image_base64"):
+                        img_bytes = base64.b64decode(res["annotated_image_base64"])
+                        st.image(img_bytes, caption="AI Model Detection & Bounding Box", width=450)
+                    else:
+                        st.image(uploaded_file, caption="Uploaded Produce", width=450)
+
                     freshness = res.get("freshness_assessment", {})
                     
                     c1, c2, c3 = st.columns(3)
@@ -242,7 +245,7 @@ with tab2:
                     c2.metric("⏳ Est. Days Remaining", f"{freshness.get('estimated_days_remaining')} Days")
                     c3.metric("📅 Expiration Date", freshness.get("estimated_expiration_date"))
                     
-                    st.cache_data.clear() # Clear cache so inventory updates immediately
+                    st.cache_data.clear() 
                 else:
                     st.warning(res.get("message", "No item detected."))
             except Exception as e:
@@ -255,7 +258,7 @@ with tab3:
     st.header("📦 Warehouse Inventory")
     inv_items = fetch_inventory_cached()
     if inv_items:
-        st.dataframe(pd.DataFrame(inv_items), use_container_width=True)
+        st.dataframe(pd.DataFrame(inv_items), width='stretch')
     else:
         st.info("Inventory is empty.")
 
@@ -266,6 +269,6 @@ with tab4:
     st.header("🛠️ Telemetry Logs")
     df_logs = fetch_telemetry_cached()
     if not df_logs.empty:
-        st.dataframe(df_logs, use_container_width=True)
+        st.dataframe(df_logs, width='stretch')
     else:
-        st.info("No logs available.")
+        st.info("No logs available.")       
