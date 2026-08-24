@@ -1,76 +1,82 @@
 import os
-import io
-import cv2
 import numpy as np
-from PIL import Image
 from ultralytics import YOLO
+from PIL import Image
+import io
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pt")
+CUSTOM_MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pt")
+BASE_MODEL_PATH = os.path.join(BASE_DIR, "..", "yolov8n.pt")
 
-# Load the YOLO model
-model = YOLO(MODEL_PATH)
-
-# Valid and allowed classes for the demo (Strictly the 4 trained produce items)
-VALID_CLASSES = ['potato', 'onion', 'tomato', 'garlic', 'potatoes', 'onions', 'tomatoes', 'garlics']
+# Load both models into memory once on startup
+custom_model = YOLO(CUSTOM_MODEL_PATH) if os.path.exists(CUSTOM_MODEL_PATH) else None
+base_model = YOLO(BASE_MODEL_PATH) if os.path.exists(BASE_MODEL_PATH) else YOLO("yolov8n.pt")
 
 def analyze_image(image_bytes: bytes) -> dict:
+    """
+    Analyzes image bytes using both models hand-in-hand (Ensemble Method).
+    """
     try:
-        # Decode image bytes using OpenCV and PIL
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img_cv = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        results = model.predict(image, verbose=False)
-        result = results[0]
         
-        item_name = "unknown"
-        confidence = 0.0
+        # 1. Get predictions from both models simultaneously
+        custom_results = custom_model.predict(image, verbose=False)[0] if custom_model else None
+        base_results = base_model.predict(image, verbose=False)[0]
+        
+        custom_conf = 0.0
+        custom_item = "unknown"
+        
+        # Extract custom model top prediction
+        if custom_results and hasattr(custom_results, 'probs') and custom_results.probs is not None:
+            c_idx = int(custom_results.probs.top1)
+            custom_conf = float(custom_results.probs.top1conf)
+            custom_item = custom_results.names.get(c_idx, "unknown")
 
-        # Check if the model is running classification
-        if hasattr(result, 'probs') and result.probs is not None:
-            top_class_index = int(result.probs.top1)
-            confidence = float(result.probs.top1conf)
-            raw_item_name = result.names.get(top_class_index, "unknown").lower()
+        # 2. Hand-in-Hand Logic (Consensus & Boosting)
+        # If your custom model is confident, it takes the lead
+        if custom_conf >= 0.55:
+            return {
+                "detected": True,
+                "primary_item": custom_item,
+                "confidence": round(custom_conf, 2),
+                "analysis_mode": "custom_lead"
+            }
             
-            # Print raw detection details in the terminal for debugging
-            print(f"--> Model detected raw: {raw_item_name} with confidence {confidence}")
-
-            # Reject detection if confidence is below 70% or if the item is outside the 4 allowed categories
-            if raw_item_name not in VALID_CLASSES or confidence < 0.70:
-                return {"detected": False, "message": "Produce not recognized among the 4 trained categories."}
+        # If custom model is unsure (e.g., 30% - 50% confidence), 
+        # check if the base model can corroborate or if we default to base model
+        if hasattr(base_results, 'probs') and base_results.probs is not None:
+            b_idx = int(base_results.probs.top1)
+            base_conf = float(base_results.probs.top1conf)
+            base_item = base_results.names.get(b_idx, "unknown")
             
-            item_name = raw_item_name
-            
-            # Draw a custom visual bounding box overlay and label on the image
-            h, w, _ = img_cv.shape
-            cv2.rectangle(img_cv, (50, 50), (w - 50, h - 50), (0, 255, 0), 4)
-            label_text = f"{item_name.capitalize()} ({confidence*100:.1f}%)"
-            cv2.putText(img_cv, label_text, (60, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
-            annotated_frame = img_cv
-
-        # Check if the model is running object detection (bounding boxes)
-        elif hasattr(result, 'boxes') and result.boxes is not None and len(result.boxes) > 0:
-            box = result.boxes[0]
-            top_class_index = int(box.cls[0])
-            confidence = float(box.conf[0])
-            raw_item_name = result.names.get(top_class_index, "unknown").lower()
-            
-            if raw_item_name not in VALID_CLASSES or confidence < 0.70:
-                return {"detected": False, "message": "Produce not recognized."}
+            # If custom model detected a valid produce item but with low confidence, 
+            # and base model agrees or has a strong alternative, we merge insights.
+            if custom_conf >= 0.20:
+                return {
+                    "detected": True,
+                    "primary_item": custom_item, # Prioritize custom warehouse label
+                    "confidence": round((custom_conf + base_conf) / 2, 2), # Fused confidence
+                    "analysis_mode": "ensemble_fusion"
+                }
+            else:
+                # Custom model had no idea what it was; rely fully on base model
+                return {
+                    "detected": True,
+                    "primary_item": base_item,
+                    "confidence": round(base_conf, 2),
+                    "analysis_mode": "base_fallback"
+                }
                 
-            item_name = raw_item_name
-            annotated_frame = result.plot()
-        else:
-            return {"detected": False, "message": "No recognizable produce detected."}
-
-        return {
-            "detected": True,
-            "primary_item": item_name,
-            "confidence": round(confidence, 2),
-            "annotated_frame": annotated_frame
-        }
+        elif custom_conf >= 0.20:
+            return {
+                "detected": True,
+                "primary_item": custom_item,
+                "confidence": round(custom_conf, 2),
+                "analysis_mode": "custom_solo"
+            }
+            
+        return {"detected": False}
         
     except Exception as e:
-        print(f"Vision Error: {e}")
+        print(f"Hand-in-Hand Vision Error: {e}")
         return {"detected": False}

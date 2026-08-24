@@ -24,7 +24,6 @@ SMARTA_CACHE = {
 model = IsolationForest(contamination=0.05, random_state=42, n_jobs=1)
 
 def get_db_connection():
-    pooler_url = "postgresql://postgres.fhfxqryxspsaohzojjmz:dDwK7YuKfIJ893JS@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
     return psycopg2.connect(pooler_url)
 
 def init_postgres_db():
