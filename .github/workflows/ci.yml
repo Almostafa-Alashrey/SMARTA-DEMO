@@ -21,7 +21,7 @@ jobs:
 
     - name: Create Mock .env file
       run: |
-        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres" > backend/.env
+        echo "DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres" > backend/.env
 
     - name: Build and start containers
       run: docker compose up -d --build
