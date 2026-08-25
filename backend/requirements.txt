@@ -9,3 +9,4 @@ opencv-python-headless
 Pillow
 ultralytics
 python-multipart
+python-dotenv
