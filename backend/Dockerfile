@@ -6,15 +6,16 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies required by OpenCV (fixes libxcb and graphical dependencies)
+# Install system dependencies required by OpenCV
 RUN apt-get update && apt-get install -y \
     libxcb1 \
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install python packages
+# Copy requirements and install python packages (CPU version of torch first for speed)
 COPY requirements.txt .
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all project files into the container

@@ -11,6 +11,10 @@ from fastapi import FastAPI, File, UploadFile, Form
 from sklearn.ensemble import IsolationForest
 from vision import analyze_image
 
+# 1. Load environment variables first!
+from dotenv import load_dotenv
+load_dotenv()
+
 # Ignore sklearn warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
@@ -25,7 +29,6 @@ SMARTA_CACHE = {
 model = IsolationForest(contamination=0.05, random_state=42, n_jobs=1)
 
 def get_db_connection():
-    # Fetch the database URL from environment variables securely
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise ValueError("DATABASE_URL environment variable is missing!")
@@ -114,7 +117,8 @@ def receive_telemetry(data: dict):
         if len(buffer) >= 10:
             model.fit(np.array(buffer))
             pred = model.predict([[temp, hum, gas]])[0]
-            if pred == -1 and (temp > 30.0 or hum > 75.0 or gas > 2.0):
+            # التعديل الأهم: الغاز لازم يعدي الـ 1000 عشان يبقى Anomaly
+            if pred == -1 and (temp > 30.0 or hum > 75.0 or gas > 1000.0):
                 is_anomaly = 1
 
         if is_anomaly == 0:
@@ -173,7 +177,6 @@ async def scan_veggie(file: UploadFile = File(...), shelf_id: str = Form("Shelf 
 
     SMARTA_CACHE["inventory"] = None
 
-    # Prepare the image with Bounding Box and send it as Base64
     annotated_base64 = None
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
