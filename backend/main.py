@@ -11,6 +11,7 @@ from fastapi import FastAPI, File, UploadFile, Form
 from sklearn.ensemble import IsolationForest
 from vision import analyze_image
 
+# Ignore sklearn warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
 app = FastAPI(title="SMARTA Real-Time API")
@@ -24,8 +25,11 @@ SMARTA_CACHE = {
 model = IsolationForest(contamination=0.05, random_state=42, n_jobs=1)
 
 def get_db_connection():
-    pooler_url = "postgresql://postgres.fhfxqryxspsaohzojjmz:dDwK7YuKfIJ893JS@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
-    return psycopg2.connect(pooler_url)
+    # Fetch the database URL from environment variables securely
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable is missing!")
+    return psycopg2.connect(db_url)
 
 def init_postgres_db():
     conn = get_db_connection()
@@ -96,8 +100,13 @@ def startup_event():
 @app.post("/api/v1/telemetry")
 def receive_telemetry(data: dict):
     try:
-        temp, hum, gas = float(data.get('temperature', 0.0)), float(data.get('humidity', 0.0)), float(data.get('gas_level', 0.0))
-        sensor_id, location, timestamp = str(data.get('sensor_id', 'SENS-01')), str(data.get('location', 'Shelf A1')), str(data.get('timestamp', datetime.now().isoformat()))
+        temp = float(data.get('temperature', 0.0))
+        hum = float(data.get('humidity', 0.0))
+        gas = float(data.get('gas_level', 0.0))
+        
+        sensor_id = str(data.get('sensor_id', 'SENS-01'))
+        location = str(data.get('location', 'Shelf A1'))
+        timestamp = str(data.get('timestamp', datetime.now().isoformat()))
 
         is_anomaly = 0
         buffer = SMARTA_CACHE["telemetry_buffer"]
@@ -164,7 +173,7 @@ async def scan_veggie(file: UploadFile = File(...), shelf_id: str = Form("Shelf 
 
     SMARTA_CACHE["inventory"] = None
 
-    # تجهيز الصورة بالـ Bounding Box وإرسالها كـ Base64
+    # Prepare the image with Bounding Box and send it as Base64
     annotated_base64 = None
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)

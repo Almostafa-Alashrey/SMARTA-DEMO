@@ -21,8 +21,7 @@ jobs:
 
     - name: Create Mock .env file
       run: |
-        echo "BACKEND_URL=http://localhost:8000" > .env
-        # لو في أي متغيرات بيئة (Environment Variables) الداتا بيز أو الباك إند بيحتاجها حطها هنا
+        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres" > backend/.env
 
     - name: Build and start containers
       run: docker compose up -d --build
