@@ -1,54 +1,44 @@
-# services:
-#   backend:
-#     build: ./backend
-#     container_name: smarta_backend
-#     ports:
-#       - "8000:8000"
-#     volumes:
-#       - smarta_data:/app/data
-#     environment:
-#       - SQLITE_DB_PATH=/app/data/smarta_v2.db
-#     restart: always
-
-#   frontend:
-#     build: ./frontend
-#     container_name: smarta_frontend
-#     ports:
-#       - "8501:8501"
-#     volumes:
-#       - smarta_data:/app/data
-#     environment:
-#       - DB_PATH=/app/data/smarta_v2.db
-#     depends_on:
-#       - backend
-#     restart: always
-
-#   iot_simulator:
-#     build: ./iot_simulator
-#     container_name: smarta_simulator
-#     environment:
-#       - BACKEND_URL=http://backend:8000/api/v1/telemetry
-#     depends_on:
-#       - backend
-#     restart: always
-
-# volumes:
-#   smarta_data:
-
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_USER: smarta_admin
-      POSTGRES_PASSWORD: smarta_password
-      POSTGRES_DB: smarta_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: smarta_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - db
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: smarta_frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    restart: always
+
+  iot_simulator:
+    build: ./iot_simulator
+    container_name: smarta_simulator
+    environment:
+      - BACKEND_URL=http://backend:8000/api/v1/telemetry
+    depends_on:
+      - backend
+    restart: always
 
 volumes:
   pg_data:
