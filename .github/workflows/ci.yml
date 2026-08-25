@@ -31,7 +31,6 @@ jobs:
 
     - name: Test Backend API Health
       run: |
-        echo "Waiting 30 seconds for backend and AI models to initialize..."
         sleep 30
         curl -f http://localhost:8000/docs || (docker compose logs && exit 1)
 
