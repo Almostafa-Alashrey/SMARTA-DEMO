@@ -12,18 +12,20 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    - name: Install Docker Compose
-      run: sudo apt-get update && sudo apt-get install docker-compose -y
+    - name: Create Mock .env file
+      run: |
+        echo "BACKEND_URL=http://localhost:8000" > .env
+        # لو في أي متغيرات بيئة (Environment Variables) الداتا بيز أو الباك إند بيحتاجها حطها هنا
 
     - name: Build and start containers
-      run: docker-compose up -d --build
+      run: docker compose up -d --build
 
     - name: Check running containers
       run: docker ps -a
@@ -32,8 +34,8 @@ jobs:
       run: |
         echo "Waiting 30 seconds for backend and AI models to initialize..."
         sleep 30
-        curl -f http://localhost:8000/docs || (docker-compose logs && exit 1)
+        curl -f http://localhost:8000/docs || (docker compose logs && exit 1)
 
     - name: Shut down containers
       if: always()
-      run: docker-compose down
+      run: docker compose down
