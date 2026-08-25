@@ -3,4 +3,4 @@
 *.db-wal
 *.pt
 __pycache__/
-.venv/
+venv/
